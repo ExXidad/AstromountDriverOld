@@ -16,9 +16,9 @@ void setup();
 
 void loop();
 
-void altEncoderInterupt();
+void altEncoderInterrupt();
 
-void azEncoderInterupt();
+void azEncoderInterrupt();
 
 void parsing();
 

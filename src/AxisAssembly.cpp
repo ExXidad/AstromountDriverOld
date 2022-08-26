@@ -4,15 +4,23 @@
 
 #include "AxisAssembly.h"
 
-AxisAssembly::AxisAssembly(const int &keyA, const int &keyB, const int &pwm, const int &enc, const int &cp,
-                           const int &ep)
+AxisAssembly::AxisAssembly(const String &name, const int &keyA, const int &keyB, const int &pwm, const int &enc,
+                           const int &cp,
+                           const int &ep, const uint32_t &countsPerRevolution,
+                           const double &maxAchievedVelMRPS)
 {
+    this->name = name;
     this->keyA = keyA;
     this->keyB = keyB;
     this->pwm = pwm;
     this->enc = enc;
     this->cp = cp;
     this->ep = ep;
+    this->countsPerRevolution = countsPerRevolution;
+
+    countsPerRadian = this->countsPerRevolution / 6.28319;
+    C = 0.95 * 127. / CPUSfromMRPS(maxAchievedVelMRPS);
+    pidPWM = 0;
 
     pinMode(keyA, OUTPUT);
     pinMode(keyB, OUTPUT);
@@ -20,7 +28,7 @@ AxisAssembly::AxisAssembly(const int &keyA, const int &keyB, const int &pwm, con
     pinMode(enc, INPUT);
 
     motorOff();
-    encTimer = micros();
+    updateVelocity();
 }
 
 AxisAssembly::~AxisAssembly()
@@ -38,15 +46,6 @@ void AxisAssembly::encoderInterrupt()
         case 2:
             --encCounter;
             break;
-    }
-
-    ++encIncCounter;
-
-    if (encIncCounter >= COUNTER_PERIOD)
-    {
-        encVelocity = micros() - encTimer;
-        encTimer = micros();
-        encIncCounter = 0;
     }
 }
 
@@ -87,8 +86,6 @@ void AxisAssembly::motorGo(uint8_t dirToGo, uint8_t pwmToWrite)
 
         this->dirMem = dirToGo;
         this->pwmMem = pwmToWrite;
-        Serial.println(dirMem);
-        Serial.println(pwmMem);
     }
 }
 
@@ -100,4 +97,120 @@ int AxisAssembly::readCurrent()
 int AxisAssembly::readEnable()
 {
     return analogRead(ep);
+}
+
+void AxisAssembly::updateVelocity()
+{
+    int32_t encCounterDifference = encCounter - encTmpCounter;
+    uint32_t encTimerDifference = micros() - encTimer;
+
+    encVelocity = 1. * encCounterDifference / encTimerDifference;
+
+    encTimer = micros();
+    encTmpCounter = encCounter;
+
+    currentVelocity = encVelocity;
+}
+
+double AxisAssembly::slewAtConstantVelocity()
+{
+    return 0;
+}
+
+void AxisAssembly::correctVelocity()
+{
+    updateVelocity();
+    if (moving)
+    {
+        double error = targetVelocity - currentVelocity;
+        uint32_t dt = micros() - prevCallTime;
+
+        p = error;
+        i = i + error * dt;
+        d = (error - prevError) / dt;
+
+        pidPWM += C * kp * p;// + ki * i + kd * d;
+        int absOutput = abs(pidPWM);
+        motorGo(pidPWM > 0 ? 1 : 2, absOutput > 127 ? 127 : absOutput);
+
+        prevError = error;
+        prevCallTime = micros();
+    }
+}
+
+void AxisAssembly::setTargetVelocity(const double &uRadPerSecond)
+{
+    targetVelocity = CPUSfromMRPS(uRadPerSecond);
+    pidPWM = C * targetVelocity;
+
+    resetPID();
+}
+
+void AxisAssembly::setPIDParameters(const double &kp, const double &ki, const double &kd)
+{
+    this->kp = kp / 1000.;
+    this->ki = ki;
+    this->kd = kd;
+}
+
+void AxisAssembly::startMotion()
+{
+    moving = true;
+    resetPID();
+}
+
+void AxisAssembly::stopMotion()
+{
+    moving = false;
+    motorOff();
+    resetPID();
+}
+
+double AxisAssembly::CPUSfromMRPS(const double &mRadPerSecond)
+{
+    return mRadPerSecond * 0.000000001 * countsPerRadian;
+}
+
+double AxisAssembly::CPUStoMRPS(const double &vel)
+{
+    return vel * 1000000000. / countsPerRadian;
+}
+
+double AxisAssembly::countsToRad(const double &counts)
+{
+    return counts / countsPerRadian;
+}
+
+double AxisAssembly::radToCounts(const double &rad)
+{
+    return countsPerRadian * rad;
+}
+
+void AxisAssembly::printInfo()
+{
+    Serial.print(name);
+    Serial.print(",");
+    Serial.print(dirMem);
+    Serial.print(",");
+    Serial.print(pwmMem);
+    Serial.print(",");
+    Serial.print(countsToRad(encCounter), 3);
+    Serial.print(",");
+    Serial.print(CPUStoMRPS(currentVelocity), 10);
+    Serial.print(",");
+    Serial.print(CPUStoMRPS(targetVelocity), 10);
+    Serial.print(",");
+    Serial.print(CPUSfromMRPS(50) * C, 4);
+    Serial.print(",");
+    Serial.print(CPUStoMRPS(kp * C), 4);
+    Serial.print(",");
+    Serial.print(pidPWM, 4);
+    Serial.println(";");
+}
+
+void AxisAssembly::resetPID()
+{
+    i = 0;
+    prevError = 0;
+    prevCallTime = micros();
 }
