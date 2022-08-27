@@ -17,8 +17,8 @@ public:
     volatile uint32_t encTimer;
     double encVelocity;
     uint8_t dirMem, pwmMem;
-    int32_t encTmpCounter;
-    double currentVelocity;
+    int32_t prevEncCounter;
+    double currentVelocity=0;
 
     double countsPerRevolution;
     double countsPerRadian;
@@ -33,6 +33,9 @@ public:
     double C, pidPWM;
     double prevError;
     uint32_t prevCallTime;
+
+    // Another PID
+    double targetPosition;
 
     // Flag
     bool moving = false;
@@ -52,17 +55,11 @@ public:
 
     void motorGo(uint8_t dir, uint8_t pwm);
 
-    int readCurrent();
-
-    int readEnable();
-
     void updateVelocity();
 
-    double slewAtConstantVelocity();
+    void correctPosition();
 
-    void correctVelocity();
-
-    void setTargetVelocity(const double &uRadPerSecond);
+    void setTargetPosition(const double &targetPosition);
 
     void setPIDParameters(const double &kp, const double &ki, const double &kd);
 
@@ -70,9 +67,9 @@ public:
 
     void stopMotion();
 
-    double CPUSfromMRPS(const double &mRadPerSecond);
+    double RPStoCPUS(const double &radPerSecond);
 
-    double CPUStoMRPS(const double &vel);
+    double CPUStoRPS(const double &countsPerUSecond);
 
     double countsToRad(const double &counts);
 
@@ -81,6 +78,8 @@ public:
     void printInfo();
 
     void resetPID();
+
+    void setZeroPosition();
 
 private:
 

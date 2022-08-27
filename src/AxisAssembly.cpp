@@ -19,7 +19,7 @@ AxisAssembly::AxisAssembly(const String &name, const int &keyA, const int &keyB,
     this->countsPerRevolution = countsPerRevolution;
 
     countsPerRadian = this->countsPerRevolution / 6.28319;
-    C = 0.95 * 127. / CPUSfromMRPS(maxAchievedVelMRPS);
+    C = 0.95 * 127. / RPStoCPUS(maxAchievedVelMRPS);
     pidPWM = 0;
 
     pinMode(keyA, OUTPUT);
@@ -89,66 +89,22 @@ void AxisAssembly::motorGo(uint8_t dirToGo, uint8_t pwmToWrite)
     }
 }
 
-int AxisAssembly::readCurrent()
-{
-    return analogRead(cp);
-}
-
-int AxisAssembly::readEnable()
-{
-    return analogRead(ep);
-}
-
 void AxisAssembly::updateVelocity()
 {
-    int32_t encCounterDifference = encCounter - encTmpCounter;
-    uint32_t encTimerDifference = micros() - encTimer;
+    double posDifference = countsToRad(encCounter - prevEncCounter);
+    double timeDifference = (micros() - encTimer) * 0.000001;
 
-    encVelocity = 1. * encCounterDifference / encTimerDifference;
+    encVelocity = posDifference / timeDifference;
 
     encTimer = micros();
-    encTmpCounter = encCounter;
 
+    prevEncCounter = encCounter;
     currentVelocity = encVelocity;
-}
-
-double AxisAssembly::slewAtConstantVelocity()
-{
-    return 0;
-}
-
-void AxisAssembly::correctVelocity()
-{
-    updateVelocity();
-    if (moving)
-    {
-        double error = targetVelocity - currentVelocity;
-        uint32_t dt = micros() - prevCallTime;
-
-        p = error;
-        i = i + error * dt;
-        d = (error - prevError) / dt;
-
-        pidPWM += C * kp * p;// + ki * i + kd * d;
-        int absOutput = abs(pidPWM);
-        motorGo(pidPWM > 0 ? 1 : 2, absOutput > 127 ? 127 : absOutput);
-
-        prevError = error;
-        prevCallTime = micros();
-    }
-}
-
-void AxisAssembly::setTargetVelocity(const double &uRadPerSecond)
-{
-    targetVelocity = CPUSfromMRPS(uRadPerSecond);
-    pidPWM = C * targetVelocity;
-
-    resetPID();
 }
 
 void AxisAssembly::setPIDParameters(const double &kp, const double &ki, const double &kd)
 {
-    this->kp = kp / 1000.;
+    this->kp = kp;
     this->ki = ki;
     this->kd = kd;
 }
@@ -166,14 +122,14 @@ void AxisAssembly::stopMotion()
     resetPID();
 }
 
-double AxisAssembly::CPUSfromMRPS(const double &mRadPerSecond)
+double AxisAssembly::RPStoCPUS(const double &radPerSecond)
 {
-    return mRadPerSecond * 0.000000001 * countsPerRadian;
+    return radPerSecond * 0.000000001 * countsPerRadian;
 }
 
-double AxisAssembly::CPUStoMRPS(const double &vel)
+double AxisAssembly::CPUStoRPS(const double &countsPerUSecond)
 {
-    return vel * 1000000000. / countsPerRadian;
+    return countsPerUSecond * 1000000000. / countsPerRadian;
 }
 
 double AxisAssembly::countsToRad(const double &counts)
@@ -194,15 +150,13 @@ void AxisAssembly::printInfo()
     Serial.print(",");
     Serial.print(pwmMem);
     Serial.print(",");
-    Serial.print(countsToRad(encCounter), 3);
+    Serial.print(countsToRad(encCounter), 10);
     Serial.print(",");
-    Serial.print(CPUStoMRPS(currentVelocity), 10);
+    Serial.print(targetPosition, 10);
     Serial.print(",");
-    Serial.print(CPUStoMRPS(targetVelocity), 10);
+    Serial.print(p, 4);
     Serial.print(",");
-    Serial.print(CPUSfromMRPS(50) * C, 4);
-    Serial.print(",");
-    Serial.print(CPUStoMRPS(kp * C), 4);
+    Serial.print(kp, 4);
     Serial.print(",");
     Serial.print(pidPWM, 4);
     Serial.println(";");
@@ -213,4 +167,35 @@ void AxisAssembly::resetPID()
     i = 0;
     prevError = 0;
     prevCallTime = micros();
+}
+
+void AxisAssembly::setTargetPosition(const double &targetPosition)
+{
+    this->targetPosition = targetPosition;
+}
+
+void AxisAssembly::correctPosition()
+{
+//    updateVelocity();
+    if (moving)
+    {
+        double error = targetPosition - countsToRad(encCounter);
+        double dt = (micros() - prevCallTime) * 0.000001;
+
+        p = error;
+        i = i + error * dt;
+        d = 1. * (error - prevError) / dt;
+
+        pidPWM = kp * p + ki * i + kd * d;
+        int absOutput = abs(pidPWM);
+        motorGo(pidPWM > 0 ? 1 : 2, absOutput > 127 ? 127 : absOutput);
+
+        prevError = error;
+        prevCallTime = micros();
+    }
+}
+
+void AxisAssembly::setZeroPosition()
+{
+    encCounter = 0;
 }
