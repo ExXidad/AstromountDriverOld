@@ -18,7 +18,7 @@ public:
     double encVelocity;
     uint8_t dirMem, pwmMem;
     int32_t prevEncCounter;
-    double currentVelocity=0;
+    double currentVelocity = 0;
 
     double countsPerRevolution;
     double countsPerRadian;
@@ -34,11 +34,17 @@ public:
     double prevError;
     uint32_t prevCallTime;
 
+    double *timePoints = nullptr, *posPoints = nullptr;
+    uint32_t startTime = 0;
+    uint8_t numberOfPoints,intervalIdx = 0;
+
     // Another PID
     double targetPosition;
 
     // Flag
     bool moving = false;
+    bool movingByRoute = false;
+    bool routeWasDefined = false;
 
 
 private:
@@ -80,6 +86,12 @@ public:
     void resetPID();
 
     void setZeroPosition();
+
+    void addRoute(double *timePoints, double *posPoints, const uint8_t &numberOfPoints);
+
+    void startRoute();
+
+    void moveToRouteStartPosition();
 
 private:
 

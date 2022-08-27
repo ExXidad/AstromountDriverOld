@@ -22,4 +22,6 @@ void azEncoderInterrupt();
 
 void parsing();
 
+void printRoutePoints();
+
 #endif //ASTROMOUNTDRIVER_MAIN_H
