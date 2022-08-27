@@ -6,8 +6,7 @@
 
 AxisAssembly::AxisAssembly(const String &name, const int &keyA, const int &keyB, const int &pwm, const int &enc,
                            const int &cp,
-                           const int &ep, const uint32_t &countsPerRevolution,
-                           const double &maxAchievedVelMRPS)
+                           const int &ep, const uint32_t &countsPerRevolution, const double &maxAchievedVelMRPS)
 {
     this->name = name;
     this->keyA = keyA;
@@ -118,6 +117,7 @@ void AxisAssembly::startMotion()
 void AxisAssembly::stopMotion()
 {
     moving = false;
+    movingByRoute = false;
     motorOff();
     resetPID();
 }
@@ -179,6 +179,32 @@ void AxisAssembly::correctPosition()
 //    updateVelocity();
     if (moving)
     {
+        // Update target position
+        if (movingByRoute)
+        {
+            double timeSinceMotionStarted = (micros() - startTime) * 0.000001;
+
+            if (timeSinceMotionStarted < timePoints[0])
+            {
+                setTargetPosition(posPoints[0]);
+            } else if (timeSinceMotionStarted > timePoints[numberOfPoints - 1])
+            {
+                setTargetPosition(posPoints[numberOfPoints - 1]);
+            } else if (intervalIdx < numberOfPoints - 1)
+            {
+                if (timeSinceMotionStarted > timePoints[intervalIdx] &&
+                    timeSinceMotionStarted < timePoints[intervalIdx + 1])
+                {
+                    setTargetPosition(posPoints[intervalIdx] +
+                                      (posPoints[intervalIdx + 1] - posPoints[intervalIdx]) /
+                                      (timePoints[intervalIdx + 1] - timePoints[intervalIdx]) *
+                                      (timeSinceMotionStarted - timePoints[intervalIdx]));
+                } else ++intervalIdx;
+            }
+        }
+
+        // PID
+
         double error = targetPosition - countsToRad(encCounter);
         double dt = (micros() - prevCallTime) * 0.000001;
 
@@ -198,4 +224,35 @@ void AxisAssembly::correctPosition()
 void AxisAssembly::setZeroPosition()
 {
     encCounter = 0;
+}
+
+void AxisAssembly::addRoute(double *timePoints, double *posPoints, const uint8_t &numberOfPoints)
+{
+    if (timePoints != nullptr && posPoints != nullptr && numberOfPoints > 0)
+    {
+        this->timePoints = timePoints;
+        this->posPoints = posPoints;
+        this->numberOfPoints = numberOfPoints;
+        routeWasDefined = true;
+    }
+}
+
+void AxisAssembly::startRoute()
+{
+    if (routeWasDefined)
+    {
+        movingByRoute = true;
+        startMotion();
+        intervalIdx = 0;
+        startTime = micros();
+    }
+}
+
+void AxisAssembly::moveToRouteStartPosition()
+{
+    if (routeWasDefined)
+    {
+        startMotion();
+        setTargetPosition(posPoints[0]);
+    }
 }
