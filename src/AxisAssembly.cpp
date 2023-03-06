@@ -51,11 +51,8 @@ void AxisAssembly::encoderInterrupt()
 // Отключение мотора
 void AxisAssembly::motorOff()
 {
-    for (int i = 0; i < 2; i++)
-    {
-        digitalWrite(keyA, LOW);
-        digitalWrite(keyB, LOW);
-    }
+    digitalWrite(keyA, HIGH);
+    digitalWrite(keyB, HIGH);
     analogWrite(pwm, 0);
     pwmMem = 0;
     dirMem = 0;
@@ -112,6 +109,7 @@ void AxisAssembly::startMotion()
 {
     moving = true;
     resetPID();
+    readPIDfromEEPROM();
 }
 
 void AxisAssembly::stopMotion()
@@ -146,7 +144,7 @@ void AxisAssembly::printInfo()
 {
     Serial.print(name);
     Serial.print(",");
-    Serial.print(dirMem);
+    Serial.print(routeWasCompleted);
     Serial.print(",");
     Serial.print(pwmMem);
     Serial.print(",");
@@ -190,6 +188,7 @@ void AxisAssembly::correctPosition()
             } else if (timeSinceMotionStarted > timePoints[numberOfPoints - 1])
             {
                 setTargetPosition(posPoints[numberOfPoints - 1]);
+                routeWasCompleted = true;
             } else if (intervalIdx < numberOfPoints - 1)
             {
                 if (timeSinceMotionStarted > timePoints[intervalIdx] &&
@@ -209,12 +208,13 @@ void AxisAssembly::correctPosition()
         double dt = (micros() - prevCallTime) * 0.000001;
 
         p = error;
-        i = i + error * dt;
+        i = i * 0.95 + error * dt;
         d = 1. * (error - prevError) / dt;
 
-        pidPWM = kp * p + ki * i + kd * d;
+        pidPWM += kp * p + ki * i + kd * d;
+        pidPWM = pidPWM > 127 ? 127 : (pidPWM < -127 ? -127 : pidPWM);
         int absOutput = abs(pidPWM);
-        motorGo(pidPWM > 0 ? 1 : 2, absOutput > 127 ? 127 : absOutput);
+        motorGo(pidPWM > 0 ? 1 : 2, absOutput);
 
         prevError = error;
         prevCallTime = micros();
@@ -245,6 +245,7 @@ void AxisAssembly::startRoute()
         startMotion();
         intervalIdx = 0;
         startTime = micros();
+        routeWasCompleted = false;
     }
 }
 
@@ -255,4 +256,11 @@ void AxisAssembly::moveToRouteStartPosition()
         startMotion();
         setTargetPosition(posPoints[0]);
     }
+}
+
+void AxisAssembly::readPIDfromEEPROM()
+{
+    EEPROM.get(0, kp);
+    EEPROM.get(8, ki);
+    EEPROM.get(16, kd);
 }

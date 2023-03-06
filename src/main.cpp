@@ -34,7 +34,7 @@ void loop()
 
     // Update and correct position
     static uint32_t tmr2 = millis();
-    if (millis() - tmr2 > 5)
+    if (millis() - tmr2 > 0)
     {
         for (int i = 0; i < NUMBEROFASSEMBLIES; ++i)
         {
@@ -46,7 +46,7 @@ void loop()
 
     // Debug print
     static uint32_t tmr1 = millis();
-    if (millis() - tmr1 > 200)
+    if (millis() - tmr1 > 100)
     {
         for (int i = 0; i < NUMBEROFASSEMBLIES; ++i)
         {
@@ -120,6 +120,9 @@ void parsing()
 
                 // Set PID parameters
             case 3:
+                EEPROM.put(0, data.getFloat(2));
+                EEPROM.put(8, data.getFloat(3));
+                EEPROM.put(16, data.getFloat(4));
                 for (int i = 0; i < NUMBEROFASSEMBLIES; ++i)
                 {
                     axisAssemblies[i].setPIDParameters(data.getFloat(2), data.getFloat(3), data.getFloat(4));

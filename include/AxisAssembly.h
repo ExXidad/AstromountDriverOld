@@ -6,6 +6,7 @@
 #define ASTROMOUNTDRIVER_AXISASSEMBLY_H
 
 #include <Arduino.h>
+#include <EEPROM.h>
 
 class AxisAssembly
 {
@@ -45,6 +46,7 @@ public:
     bool moving = false;
     bool movingByRoute = false;
     bool routeWasDefined = false;
+    bool routeWasCompleted = false;
 
 
 private:
@@ -68,6 +70,8 @@ public:
     void setTargetPosition(const double &targetPosition);
 
     void setPIDParameters(const double &kp, const double &ki, const double &kd);
+
+    void readPIDfromEEPROM();
 
     void startMotion();
 
